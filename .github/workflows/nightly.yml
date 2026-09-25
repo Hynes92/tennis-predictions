@@ -1,0 +1,71 @@
+name: Nightly pipeline
+
+# Schedules are in UTC (UK summer time = UTC+1, winter = UTC).
+#   21:37 UTC  evening: Betfair snapshot once most of tomorrow's markets are open
+#   06:07 UTC  morning: TennisMyLife results (incl. overnight Americas matches) + Betfair snapshot
+# Odd minutes avoid GitHub's busiest (and most delayed) times on the hour.
+on:
+  schedule:
+    - cron: "37 21 * * *"
+    - cron: "7 6 * * *"
+  workflow_dispatch:
+    inputs:
+      run_tml:
+        description: "Load TennisMyLife results"
+        type: boolean
+        default: true
+      run_betfair:
+        description: "Take a Betfair snapshot"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+# Never run two pipelines at once; a new run waits for the previous one.
+concurrency:
+  group: nightly-pipeline
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT: tennis-predictor-509609
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ingestion/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r ingestion/requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          project_id: ${{ env.GCP_PROJECT }}
+
+      # Morning run, or manual run with run_tml ticked
+      - name: Load TennisMyLife results (bronze)
+        if: github.event.schedule == '7 6 * * *' || (github.event_name == 'workflow_dispatch' && inputs.run_tml)
+        run: python ingestion/load_tml.py --mode daily
+
+      # Both scheduled runs, or manual run with run_betfair ticked.
+      # Runs on Cloud Run in London because Betfair blocks GitHub's US-based runners.
+      # !cancelled() keeps this running even if the TennisMyLife step failed.
+      - name: Betfair snapshot (bronze)
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_betfair) }}
+        run: gcloud run jobs execute betfair-snapshot --region europe-west2 --wait
+
+      # Later steps (added once the models exist):
+      #   dbt build        -> silver/gold features
+      #   score upcoming   -> gold.predictions
