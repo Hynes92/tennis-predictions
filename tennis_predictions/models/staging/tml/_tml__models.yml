@@ -1,0 +1,53 @@
+version: 2
+
+models:
+  - name: stg_tml__matches
+    description: >
+      One row per match across ATP tour, ATP Challenger, ATP qualifying and WTA (TennisMyLife),
+      deduplicated across yearly/ongoing files and re-loads. Winner/loser orientation is kept as in
+      the source; reshaping to player-perspective rows happens in intermediate models.
+      TML has no per-match date: use tourney_start_date + round_order to sequence matches.
+    columns:
+      - name: match_key
+        description: Surrogate key on source_dataset + tourney_id + match_num.
+        data_tests:
+          - unique
+          - not_null
+      - name: source_dataset
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['atp_tour', 'atp_challenger', 'atp_qualifying', 'wta_tour']
+      - name: tourney_start_date
+        description: Monday of the tournament week (TML tourney_date), not the exact match date.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: surface
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['hard', 'clay', 'grass', 'carpet']
+              config:
+                severity: warn
+      - name: round_order
+        description: Sortable round number (Q1=1 ... F=18). NULL means an unmapped round code.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: winner_id
+        description: >
+          TML player ID. A few current-season matches arrive without one; these are filled in by
+          name in int_tml__matches_resolved, which then enforces not_null strictly.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: loser_id
+        description: See winner_id.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn

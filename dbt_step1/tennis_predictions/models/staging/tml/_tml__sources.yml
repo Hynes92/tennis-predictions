@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: tml
+    description: >
+      TennisMyLife match database (https://stats.tennismylife.org/tennis-match-database).
+      Loaded as-is by ingestion/load_tml.py: every CSV column is a STRING, plus lineage columns
+      _source_file, _source_url, _source_row_number, _source_md5, _loaded_at.
+      Tables are append-only, so the same match can appear more than once.
+    database: "{{ target.project }}"
+    schema: bronze
+    tables:
+      - name: tml_atp_matches
+        description: ATP tour-level main-draw matches (yearly files plus ongoing_tourneys.csv).
+      - name: tml_challenger_matches
+        description: ATP Challenger matches. Serve stats are only populated from 2010.
+      - name: tml_atp_quali_matches
+        description: ATP tour-level qualifying matches.
+      - name: tml_wta_matches
+        description: WTA matches. Serve stats are patchy before 2016.
+      - name: tml_atp_players
+        description: ATP player reference table (ATP_Database.csv), replaced on every load.
+      - name: _ingestion_log
+        description: One row per file loaded by load_tml.py (file, md5, row count, load time).
