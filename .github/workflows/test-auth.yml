@@ -1,0 +1,50 @@
+name: Test authentication
+
+# Manual-only check that GitHub can reach Google Cloud (BigQuery) and Betfair.
+# Read-only: nothing is written anywhere.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # lets the job request a GitHub login token for Workload Identity Federation
+
+jobs:
+  test-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ingestion/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r ingestion/requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Test BigQuery access
+        run: |
+          python - <<'EOF'
+          from google.cloud import bigquery
+          client = bigquery.Client(project="tennis-predictor-509609", location="EU")
+          tables = sorted(t.table_id for t in client.list_tables("tennis-predictor-509609.bronze"))
+          print(f"BigQuery OK - bronze has {len(tables)} tables:")
+          for t in tables:
+              print(f"  {t}")
+          EOF
+
+      - name: Test Betfair access (dry run, prints competition counts only)
+        env:
+          BETFAIR_USERNAME: ${{ secrets.BETFAIR_USERNAME }}
+          BETFAIR_PASSWORD: ${{ secrets.BETFAIR_PASSWORD }}
+          BETFAIR_APP_KEY: ${{ secrets.BETFAIR_APP_KEY }}
+        run: python ingestion/load_betfair.py --dry-run --hours 24
