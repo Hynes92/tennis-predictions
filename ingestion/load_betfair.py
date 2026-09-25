@@ -299,7 +299,7 @@ class BronzeWriter:
 # --------------------------------------------------------------------------------------
 
 def require_env(name: str) -> str:
-    value = os.environ.get(name)
+    value = (os.environ.get(name) or "").strip()   # strip stray newlines from secret stores
     if not value:
         sys.exit(f"Missing environment variable {name}.")
     return value

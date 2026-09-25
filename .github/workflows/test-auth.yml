@@ -1,7 +1,7 @@
 name: Test authentication
 
-# Manual-only check that GitHub can reach Google Cloud (BigQuery) and Betfair.
-# Read-only: nothing is written anywhere.
+# Manual-only check that GitHub can reach BigQuery and can start the Betfair snapshot job.
+# The Betfair job runs on Cloud Run in London because Betfair blocks GitHub's US-based runners.
 on:
   workflow_dispatch:
 
@@ -12,7 +12,7 @@ permissions:
 jobs:
   test-auth:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
 
@@ -30,6 +30,7 @@ jobs:
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          project_id: tennis-predictor-509609
 
       - name: Test BigQuery access
         run: |
@@ -42,9 +43,7 @@ jobs:
               print(f"  {t}")
           EOF
 
-      - name: Test Betfair access (dry run, prints competition counts only)
-        env:
-          BETFAIR_USERNAME: ${{ secrets.BETFAIR_USERNAME }}
-          BETFAIR_PASSWORD: ${{ secrets.BETFAIR_PASSWORD }}
-          BETFAIR_APP_KEY: ${{ secrets.BETFAIR_APP_KEY }}
-        run: python ingestion/load_betfair.py --dry-run --hours 24
+      - name: Run Betfair snapshot job on Cloud Run (London)
+        run: |
+          gcloud --version | head -1
+          gcloud run jobs execute betfair-snapshot --region europe-west2 --wait

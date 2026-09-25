@@ -1,0 +1,6 @@
+# Files not uploaded to Cloud Build when deploying from source
+__pycache__/
+*.pyc
+.env
+*.json
+test_betfair.py
