@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: fct_match_features
+    description: >
+      Training table: one row per completed match, oriented player A vs player B, with pre-match
+      features for both players, A-minus-B differences, the label a_won, and data-sufficiency
+      columns. Filter on is_training_eligible for model training (2010+, no exhibitions).
+    config:
+      cluster_by: ['tour', 'tourney_date']
+    columns:
+      - name: match_key
+        data_tests:
+          - unique
+          - not_null
+      - name: a_won
+        description: Label. 1 if player A won.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: data_tier
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['full', 'partial', 'thin']
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "player_a_id != player_b_id"

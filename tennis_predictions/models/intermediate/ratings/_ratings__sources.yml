@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: ratings
+    description: >
+      Pre-match Elo / Glicko-2 ratings written by ratings/compute_ratings.py (a Python step between
+      dbt runs, because ratings are sequential and can't be computed with SQL window functions).
+      Lives next to the dbt silver models: dev_silver in dev, silver in prod.
+    database: "{{ target.project }}"
+    schema: "{{ 'silver' if target.name == 'prod' else target.schema ~ '_silver' }}"
+    tables:
+      - name: player_match_ratings
+        description: One row per player per completed match with that player's PRE-match ratings.
