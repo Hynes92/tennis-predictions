@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: int_tml__matches_resolved
+    description: >
+      stg_tml__matches with every player ID populated. Missing IDs are filled by unambiguous
+      name match within the same tour; players never seen with an ID get a temporary
+      'tmp_<tour>_<name>' ID, replaced automatically once TML assigns a real one.
+    columns:
+      - name: match_key
+        data_tests:
+          - unique
+          - not_null
+      - name: winner_id
+        data_tests:
+          - not_null
+      - name: loser_id
+        data_tests:
+          - not_null
+      - name: winner_id_source
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['tml', 'name_match', 'temporary']
+      - name: loser_id_source
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['tml', 'name_match', 'temporary']
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "winner_id != loser_id"
