@@ -167,7 +167,7 @@ class PlayerState:
 def compute(matches: pd.DataFrame) -> pd.DataFrame:
     """
     matches: one row per completed match, already sorted in time order, with columns
-      match_key, winner_id, loser_id, surface, tourney_start_date
+      match_key, winner_id, loser_id, surface, event_date
     Returns one row per player per match with that player's PRE-match ratings.
     """
     players: dict[str, PlayerState] = {}
@@ -177,7 +177,7 @@ def compute(matches: pd.DataFrame) -> pd.DataFrame:
         w = players.setdefault(row.winner_id, PlayerState())
         l = players.setdefault(row.loser_id, PlayerState())
         surface = row.surface or "unknown"
-        date = row.tourney_start_date
+        date = row.event_date
 
         # Days / weeks since each player's previous match (None for a debut)
         def idle(p: PlayerState) -> tuple[int | None, int]:
@@ -257,16 +257,16 @@ def read_matches(client, project: str, dataset: str) -> pd.DataFrame:
             player_id   as winner_id,
             opponent_id as loser_id,
             surface,
-            tourney_start_date,
+            event_date,
             match_sequence_key
         from `{project}.{dataset}.{SOURCE_TABLE}`
         where is_winner
           and is_completed_match
-          and tourney_start_date is not null
+          and event_date is not null
         order by match_sequence_key
     """
     df = client.query(sql).result().to_dataframe()
-    df["tourney_start_date"] = pd.to_datetime(df["tourney_start_date"])
+    df["event_date"] = pd.to_datetime(df["event_date"])
     return df.sort_values("match_sequence_key", kind="stable").reset_index(drop=True)
 
 

@@ -67,7 +67,12 @@ final as (
         lower(surface)                                                  as surface,
         case upper(indoor) when 'I' then true when 'O' then false end   as is_indoor,
         safe_cast(draw_size as int64)                                   as draw_size,
-        safe.parse_date('%Y%m%d', tourney_date)                         as tourney_start_date,
+        safe.parse_date('%Y%m%d', tourney_date)                         as event_date,
+        -- TML gives actual match dates for some tournaments (e.g. ATP 2026) and only the
+        -- tournament start date for others. Different dates within one tournament = match-level.
+        min(safe.parse_date('%Y%m%d', tourney_date)) over (partition by source_dataset, tourney_id)
+            != max(safe.parse_date('%Y%m%d', tourney_date)) over (partition by source_dataset, tourney_id)
+                                                                        as date_is_match_level,
         safe_cast(best_of as int64)                                     as best_of,
 
         -- round, with a sortable order so matches within a tournament can be sequenced

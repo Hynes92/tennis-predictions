@@ -118,7 +118,7 @@ final as (
         m.is_indoor,
         m.draw_size,
         m.best_of,
-        m.tourney_start_date,
+        m.event_date,
         m.round,
         m.round_order,
         m.match_num,
@@ -126,7 +126,7 @@ final as (
         -- Sortable position of this match in time. TML has no per-match date, so:
         -- tournament week, then round (qualifying before main draw), then match number.
         format('%s|%02d|%s|%05d',
-            cast(m.tourney_start_date as string),
+            cast(m.event_date as string),
             coalesce(m.round_order, 99),
             m.tourney_id,
             coalesce(m.match_num, 0)
