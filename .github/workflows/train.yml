@@ -1,0 +1,54 @@
+name: Train model
+
+# Manual: trains Elo / logistic regression / XGBoost on fct_match_features and
+# publishes the scores, charts and model files as a downloadable artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: "BigQuery dataset holding fct_match_features"
+        type: string
+        default: dev_gold
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: model/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r model/requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          project_id: tennis-predictor-509609
+
+      - name: Train and evaluate
+        run: |
+          python model/train.py --dataset "${{ inputs.dataset }}" | tee train_output.txt
+          {
+            echo '## Test period results'
+            echo '```'
+            cat train_output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-artifacts
+          path: model/artifacts/

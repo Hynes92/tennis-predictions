@@ -1,0 +1,5 @@
+google-cloud-bigquery[pandas]>=3.20
+scikit-learn>=1.4
+xgboost>=2.0
+matplotlib>=3.8
+joblib>=1.3
