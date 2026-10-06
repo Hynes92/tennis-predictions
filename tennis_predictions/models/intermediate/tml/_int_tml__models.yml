@@ -31,3 +31,23 @@ models:
       - dbt_utils.expression_is_true:
           arguments:
             expression: "winner_id != loser_id"
+
+  - name: int_tml__player_matches
+    description: >
+      One row per player per match (each match appears twice). Base for all player-level
+      features. Use match_sequence_key to order a player's matches in time, and
+      is_completed_match to exclude walkovers, defaults and abandoned matches from
+      ratings and form.
+    config:
+      cluster_by: ['player_id']
+    columns:
+      - name: player_id
+        data_tests:
+          - not_null
+      - name: match_sequence_key
+        data_tests:
+          - not_null
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['match_key', 'player_id']
