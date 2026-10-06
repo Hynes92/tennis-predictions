@@ -30,3 +30,18 @@ models:
       - dbt_utils.expression_is_true:
           arguments:
             expression: "player_a_id != player_b_id"
+  - name: fct_upcoming_match_features
+    description: >
+      Upcoming Betfair singles matches with the same feature columns as fct_match_features,
+      built from each player's current state. data_tier = 'none' when a player has no TML
+      history. market_prob_a is a benchmark only.
+    columns:
+      - name: market_id
+        data_tests:
+          - unique
+          - not_null
+      - name: data_tier
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['full', 'partial', 'thin', 'none']
