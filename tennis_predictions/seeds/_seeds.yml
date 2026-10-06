@@ -1,0 +1,12 @@
+version: 2
+
+seeds:
+  - name: betfair_player_overrides
+    description: >
+      Manual Betfair selection_id -> TML player_id fixes for names the automatic matching gets
+      wrong. Takes priority over every automatic rule in int_betfair__player_map.
+    config:
+      column_types:
+        selection_id: int64
+        tml_player_id: string
+        note: string

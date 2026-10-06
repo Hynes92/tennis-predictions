@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: stg_betfair__market_snapshots
+    description: One row per Betfair MATCH_ODDS market per snapshot, typed, with doubles/exhibition flags.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['market_id', 'snapshot_id']
+
+  - name: stg_betfair__runner_snapshots
+    description: One row per runner (player) per market per snapshot, with best prices and a mid price.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['market_id', 'snapshot_id', 'selection_id']
+
+  - name: int_betfair__upcoming_matches
+    description: >
+      Upcoming singles matches from the latest Betfair snapshot, one row per market with both
+      players side by side. market_prob_runner_1 is a benchmark only, never a model feature.
+    columns:
+      - name: market_id
+        data_tests:
+          - unique
+          - not_null
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "runner_1_selection_id != runner_2_selection_id"
+
+  - name: int_betfair__player_map
+    description: >
+      Betfair selection_id -> TML player_id. match_method: override / exact_name /
+      name_any_order / unmatched. Unmatched is expected for players with no TML history
+      (mainly ITF). Fix wrong matches via seeds/betfair_player_overrides.csv.
+    columns:
+      - name: selection_id
+        data_tests:
+          - unique
+          - not_null
+      - name: match_method
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['override', 'exact_name', 'name_any_order', 'name_prefix', 'unmatched']

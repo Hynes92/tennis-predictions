@@ -21,12 +21,12 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: ['tml', 'name_match', 'temporary']
+                values: ['tml', 'name_match', 'temporary', 'corrected', 'alias_merged']
       - name: loser_id_source
         data_tests:
           - accepted_values:
               arguments:
-                values: ['tml', 'name_match', 'temporary']
+                values: ['tml', 'name_match', 'temporary', 'corrected', 'alias_merged']
     data_tests:
       - dbt_utils.expression_is_true:
           arguments:

@@ -43,6 +43,7 @@ DEFAULT_DATASET = "dev_silver"
 DEFAULT_LOCATION = "EU"
 SOURCE_TABLE = "int_tml__player_matches"
 TARGET_TABLE = "player_match_ratings"
+CURRENT_TABLE = "player_current_ratings"
 
 # Elo
 ELO_START = 1500.0
@@ -164,11 +165,13 @@ class PlayerState:
     last_match_date: pd.Timestamp | None = None
 
 
-def compute(matches: pd.DataFrame) -> pd.DataFrame:
+def compute(matches: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, "PlayerState"]]:
     """
     matches: one row per completed match, already sorted in time order, with columns
       match_key, winner_id, loser_id, surface, event_date
-    Returns one row per player per match with that player's PRE-match ratings.
+    Returns (ratings, players):
+      ratings: one row per player per match with that player's PRE-match ratings
+      players: each player's state AFTER their latest match (for scoring upcoming matches)
     """
     players: dict[str, PlayerState] = {}
     out: list[tuple] = []
@@ -234,7 +237,7 @@ def compute(matches: pd.DataFrame) -> pd.DataFrame:
 
         w.last_match_date = l.last_match_date = date
 
-    return pd.DataFrame(out, columns=[
+    ratings = pd.DataFrame(out, columns=[
         "match_key", "player_id",
         "matches_played_pre", "surface_matches_played_pre", "days_since_last_match",
         "elo_pre", "opp_elo_pre", "elo_win_prob",
@@ -242,6 +245,35 @@ def compute(matches: pd.DataFrame) -> pd.DataFrame:
         "glicko_rating_pre", "glicko_rd_pre", "glicko_vol_pre",
         "opp_glicko_rating_pre", "opp_glicko_rd_pre", "glicko_win_prob",
     ])
+    return ratings, players
+
+
+SURFACES = ["hard", "clay", "grass", "carpet"]
+
+
+def current_state(players: dict[str, PlayerState], as_of: pd.Timestamp) -> pd.DataFrame:
+    """Each player's ratings as of `as_of` (after their latest match). Glicko RD is grown for
+    the weeks since that match, exactly as it would be going into a match on `as_of`."""
+    rows = []
+    for pid, p in players.items():
+        days = (as_of - p.last_match_date).days if p.last_match_date is not None else None
+        idle_weeks = max(days // 7 - 1, 0) if days is not None else 0
+        row = {
+            "player_id": pid,
+            "as_of_date": as_of.date(),
+            "last_match_date": p.last_match_date.date() if p.last_match_date is not None else None,
+            "days_since_last_match": days,
+            "matches_played": p.elo_matches,
+            "elo": p.elo,
+            "glicko_rating": p.g_rating,
+            "glicko_rd": glicko2_inflate_rd(p.g_rd, p.g_vol, idle_weeks),
+            "glicko_vol": p.g_vol,
+        }
+        for surf in SURFACES:
+            row[f"surface_elo_{surf}"] = p.surface_elo.get(surf, ELO_START)
+            row[f"surface_matches_{surf}"] = p.surface_matches.get(surf, 0)
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 # --------------------------------------------------------------------------------------
@@ -298,6 +330,31 @@ def write_ratings(client, project: str, dataset: str, df: pd.DataFrame) -> None:
     client.load_table_from_dataframe(df, table_id, job_config=job_config).result()
 
 
+def write_current(client, project: str, dataset: str, df: pd.DataFrame) -> None:
+    from google.cloud import bigquery
+    S = bigquery.SchemaField
+    schema = [
+        S("player_id", "STRING"), S("as_of_date", "DATE"), S("last_match_date", "DATE"),
+        S("days_since_last_match", "INT64"), S("matches_played", "INT64"),
+        S("elo", "FLOAT64"), S("glicko_rating", "FLOAT64"), S("glicko_rd", "FLOAT64"),
+        S("glicko_vol", "FLOAT64"),
+    ]
+    for surf in SURFACES:
+        schema += [S(f"surface_elo_{surf}", "FLOAT64"), S(f"surface_matches_{surf}", "INT64")]
+    schema.append(S("_computed_at", "TIMESTAMP"))
+
+    df = df.copy()
+    df["days_since_last_match"] = df["days_since_last_match"].astype("Int64")
+    df["_computed_at"] = pd.Timestamp.now(tz="UTC")
+    job_config = bigquery.LoadJobConfig(
+        schema=schema,
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+        clustering_fields=["player_id"],
+    )
+    client.load_table_from_dataframe(df, f"{project}.{dataset}.{CURRENT_TABLE}",
+                                     job_config=job_config).result()
+
+
 # --------------------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------------------
@@ -319,7 +376,9 @@ def main(argv: list[str] | None = None) -> int:
     log.info("Read %d completed matches in %.0fs", len(matches), time.time() - t0)
 
     t1 = time.time()
-    ratings = compute(matches)
+    ratings, players = compute(matches)
+    as_of = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+    current = current_state(players, as_of)
     log.info("Computed %d player-match ratings in %.0fs", len(ratings), time.time() - t1)
 
     # Sanity check: the pre-match favourite should win clearly more often than not
@@ -335,6 +394,9 @@ def main(argv: list[str] | None = None) -> int:
 
     write_ratings(client, args.project, args.dataset, ratings)
     log.info("Wrote %s.%s.%s", args.project, args.dataset, TARGET_TABLE)
+    write_current(client, args.project, args.dataset, current)
+    log.info("Wrote %s.%s.%s (%d players, as of %s)",
+             args.project, args.dataset, CURRENT_TABLE, len(current), as_of.date())
     return 0
 
 

@@ -62,6 +62,17 @@ NON_FEATURES = {
     "data_tier", "is_exhibition", "is_training_eligible",
     "tour", "competition_level", "surface",          # one-hot encoded below instead
 }
+
+# Features that exist in history but CANNOT be known for an upcoming match from Betfair
+# (no round, entry type or seeding). Training on them would create train/serve skew,
+# so the model is trained only on what is available at prediction time.
+NOT_AVAILABLE_AT_PREDICTION = {
+    "round_order",
+    "a_is_qualifier", "b_is_qualifier",
+    "a_is_wildcard", "b_is_wildcard",
+    "a_seed", "b_seed",
+}
+NON_FEATURES |= NOT_AVAILABLE_AT_PREDICTION
 CATEGORICALS = ["tour", "competition_level", "surface"]
 
 # Chart styling (reference data-viz palette, light mode)
@@ -96,7 +107,11 @@ def build_matrix(df: pd.DataFrame) -> pd.DataFrame:
         if col.dtype == object:
             raise ValueError(f"Column {c!r} is text; add it to NON_FEATURES or encode it")
         feats[c] = pd.to_numeric(col, errors="coerce").astype("float64")
-    dummies = pd.get_dummies(df[CATEGORICALS].fillna("unknown"), prefix=CATEGORICALS, dtype="float64")
+    cats = df[CATEGORICALS].fillna("unknown").copy()
+    # Betfair lists qualifying under the same competition as the main draw, so the two
+    # can't be told apart when predicting: train on the same two levels the scorer will see.
+    cats["competition_level"] = cats["competition_level"].replace({"qualifying": "main_tour"})
+    dummies = pd.get_dummies(cats, prefix=CATEGORICALS, dtype="float64")
     return pd.concat([feats, dummies], axis=1)
 
 

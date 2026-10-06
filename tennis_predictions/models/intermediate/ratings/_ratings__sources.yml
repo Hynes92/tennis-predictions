@@ -11,3 +11,7 @@ sources:
     tables:
       - name: player_match_ratings
         description: One row per player per completed match with that player's PRE-match ratings.
+  - name: player_current_ratings
+    description: >
+      One row per player: ratings AFTER their latest match, with Glicko RD grown for the time
+      since. Used to score upcoming matches. Rebuilt in full on every run.
