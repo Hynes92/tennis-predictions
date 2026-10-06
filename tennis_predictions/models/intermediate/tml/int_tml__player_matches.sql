@@ -10,8 +10,15 @@ with matches as (
     select
         *,
         -- Matches that shouldn't count as a played result for ratings/form
-        regexp_contains(upper(score), r'WEA|ABD|ABN|UNFINISHED|UNP') as is_abandoned
+        regexp_contains(upper(score), r'WEA|ABD|ABN|UNFINISHED|UNP') as is_abandoned,
+
+        -- One definition of "when" for the whole pipeline: the tournament's first date
+        -- (qualifying included). Team events spread over more than 3 weeks use the match's own date.
+        if(date_diff(max(event_date) over tourney, min(event_date) over tourney, day) <= 21,
+           min(event_date) over tourney,
+           event_date) as tourney_date
     from {{ ref('int_tml__matches_resolved') }}
+    window tourney as (partition by tour, tourney_id)
 
 ),
 
@@ -122,10 +129,12 @@ final as (
         m.round,
         m.round_order,
         m.match_num,
+        m.tourney_date,
 
-        -- Sortable position of this match in time. TML has no per-match date, so:
-        -- tournament week, then round (qualifying before main draw), then match number.
-        format('%s|%02d|%s|%05d',
+        -- Sortable position of this match in time: tournament date, then match date
+        -- (where the source has one), then round, then match number.
+        format('%s|%s|%02d|%s|%05d',
+            cast(m.tourney_date as string),
             cast(m.event_date as string),
             coalesce(m.round_order, 99),
             m.tourney_id,

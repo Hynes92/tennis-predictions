@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: int_player_form
+    description: >
+      Rolling results, serve/return and workload features for every player before every completed
+      match. Point-in-time safe: last-N windows use only previous matches; week windows end the day
+      before the current tournament starts; *_this_tourney features cover earlier rounds of the
+      current tournament. Rates are NULL when the window has no data.
+    config:
+      cluster_by: ['player_id']
+    columns:
+      - name: matches_last_10
+        description: Previous completed matches counted in the last-10 window (0-10).
+      - name: matches_last_52w
+        description: Completed matches in the 52 weeks before this tournament. Data-sufficiency signal.
+      - name: stats_matches_last_52w
+        description: How many of those matches had serve/return stats. Sample size for the *_52w rates.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['match_key', 'player_id']
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "matches_last_10 between 0 and 10"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "win_rate_last_52w is null or win_rate_last_52w between 0 and 1"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "serve_points_won_pct_52w is null or serve_points_won_pct_52w between 0 and 1"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "return_points_won_pct_52w is null or return_points_won_pct_52w between 0 and 1"
