@@ -52,3 +52,10 @@ jobs:
         with:
           name: model-artifacts
           path: model/artifacts/
+      - name: Publish model to Cloud Storage
+        run: |
+          # Keep every trained model by run ID, and keep "latest" pointing at the newest one
+          gcloud storage cp model/artifacts/* "gs://tennis-predictor-509609-models/models/${{ github.run_id }}/"
+          gcloud storage rm "gs://tennis-predictor-509609-models/models/latest/**" --quiet || true
+          gcloud storage cp model/artifacts/* "gs://tennis-predictor-509609-models/models/latest/"
+          echo "Published model run ${{ github.run_id }}" >> "$GITHUB_STEP_SUMMARY"

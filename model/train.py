@@ -52,28 +52,7 @@ TEST_START = "2025-01-01"
 
 ARTIFACTS = Path(__file__).resolve().parent / "artifacts"
 
-LABEL = "a_won"
-
-# Columns that identify or describe a match but must never be model inputs
-NON_FEATURES = {
-    LABEL, "match_key", "tourney_id", "tourney_name", "tourney_level_raw", "source_dataset",
-    "tourney_date", "event_date", "match_sequence_key", "round",
-    "player_a_id", "player_b_id", "a_id_source", "b_id_source",
-    "data_tier", "is_exhibition", "is_training_eligible",
-    "tour", "competition_level", "surface",          # one-hot encoded below instead
-}
-
-# Features that exist in history but CANNOT be known for an upcoming match from Betfair
-# (no round, entry type or seeding). Training on them would create train/serve skew,
-# so the model is trained only on what is available at prediction time.
-NOT_AVAILABLE_AT_PREDICTION = {
-    "round_order",
-    "a_is_qualifier", "b_is_qualifier",
-    "a_is_wildcard", "b_is_wildcard",
-    "a_seed", "b_seed",
-}
-NON_FEATURES |= NOT_AVAILABLE_AT_PREDICTION
-CATEGORICALS = ["tour", "competition_level", "surface"]
+from features import CATEGORICALS, LABEL, NON_FEATURES, build_matrix  # shared with score.py
 
 # Chart styling (reference data-viz palette, light mode)
 SURFACE, TEXT, TEXT_2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
@@ -94,25 +73,6 @@ def load(project: str, dataset: str, location: str) -> pd.DataFrame:
     df = client.query(sql).result().to_dataframe()
     df["tourney_date"] = pd.to_datetime(df["tourney_date"])
     return df
-
-
-def build_matrix(df: pd.DataFrame) -> pd.DataFrame:
-    """Numeric feature matrix: every non-identifier column as float (NaN = missing),
-    plus one-hot columns for tour / competition level / surface."""
-    feats = df[[c for c in df.columns if c not in NON_FEATURES]].copy()
-    for c in feats.columns:
-        col = feats[c]
-        if col.dtype.name in ("bool", "boolean"):
-            col = col.astype("Float64")
-        if col.dtype == object:
-            raise ValueError(f"Column {c!r} is text; add it to NON_FEATURES or encode it")
-        feats[c] = pd.to_numeric(col, errors="coerce").astype("float64")
-    cats = df[CATEGORICALS].fillna("unknown").copy()
-    # Betfair lists qualifying under the same competition as the main draw, so the two
-    # can't be told apart when predicting: train on the same two levels the scorer will see.
-    cats["competition_level"] = cats["competition_level"].replace({"qualifying": "main_tour"})
-    dummies = pd.get_dummies(cats, prefix=CATEGORICALS, dtype="float64")
-    return pd.concat([feats, dummies], axis=1)
 
 
 def split(df: pd.DataFrame, X: pd.DataFrame):
@@ -295,6 +255,17 @@ def run(df: pd.DataFrame, out_dir: Path) -> dict:
 
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
     (out_dir / "features.json").write_text(json.dumps(list(X.columns), indent=2))
+    import os
+    from datetime import datetime, timezone
+    (out_dir / "model_info.json").write_text(json.dumps({
+        "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "git_sha": os.environ.get("GITHUB_SHA"),
+        "train_end": TRAIN_END,
+        "test_start": TEST_START,
+        "n_features": int(X.shape[1]),
+        "xgboost_best_iteration": int(xgb.best_iteration),
+        "test_log_loss_xgboost": metrics["test_overall"]["xgboost"]["log_loss"],
+    }, indent=2))
     xgb.save_model(out_dir / "xgb_model.json")
     import joblib
     joblib.dump(logreg, out_dir / "logreg.joblib")

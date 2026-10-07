@@ -214,7 +214,8 @@ final as (
         c.competition_name,
         c.event_name,
         c.tour,
-        c.model_competition_level                         as competition_level,
+        c.model_competition_level                         as competition_level,     -- what the model sees (ITF -> challenger)
+        c.competition_level                               as betfair_competition_level, -- the real level, for reporting
         c.tml_tourney_name,
         c.surface,
         c.is_indoor,
