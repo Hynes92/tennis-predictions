@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: scoring
+    description: Tables written by model/score.py (the Python scoring step at the end of the pipeline).
+    database: "{{ target.project }}"
+    schema: "{{ 'gold' if target.name == 'prod' else target.schema ~ '_gold' }}"
+    tables:
+      - name: predictions
+        description: Append-only. One row per upcoming match per scoring run.

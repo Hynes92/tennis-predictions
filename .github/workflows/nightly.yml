@@ -110,7 +110,7 @@ jobs:
         working-directory: tennis_predictions
         run: |
           dbt deps
-          dbt build --exclude source:ratings+
+          dbt build --exclude source:ratings+ source:scoring+
 
       - name: Compute ratings
         if: ${{ !cancelled() && steps.dbt_pre.outcome == 'success' }}
@@ -135,3 +135,8 @@ jobs:
       - name: Score upcoming matches
         if: ${{ !cancelled() && steps.model.outcome == 'success' }}
         run: python model/score.py --model-dir model/latest
+        
+      - name: dbt build (prediction ledger)
+        if: ${{ !cancelled() && steps.model.outcome == 'success' }}
+        working-directory: tennis_predictions
+        run: dbt build --select source:scoring+
