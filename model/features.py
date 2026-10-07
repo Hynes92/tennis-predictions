@@ -53,7 +53,10 @@ def build_matrix(df: pd.DataFrame, feature_columns: list[str] | None = None) -> 
     if feature_columns is None:
         numeric_cols = [c for c in df.columns if c not in NON_FEATURES]
     else:
-        numeric_cols = [c for c in feature_columns if not _is_dummy(c) and c in df.columns]
+        # A real input column is always used as-is. Only names that are NOT input columns can be
+        # one-hot dummies. (Name prefixes alone are ambiguous: "surface_elo_win_prob_a" is a real
+        # feature that happens to start with "surface_".)
+        numeric_cols = [c for c in feature_columns if c in df.columns and c not in CATEGORICALS]
 
     feats = df[numeric_cols].copy()
     for c in feats.columns:
@@ -73,6 +76,10 @@ def build_matrix(df: pd.DataFrame, feature_columns: list[str] | None = None) -> 
     X = pd.concat([feats, dummies], axis=1)
     if feature_columns is not None:
         X = X.reindex(columns=feature_columns)
-        dummy_cols = [c for c in feature_columns if _is_dummy(c)]
+        dummy_cols = [c for c in feature_columns if c not in df.columns and _is_dummy(c)]
         X[dummy_cols] = X[dummy_cols].fillna(0.0)
+        missing = [c for c in feature_columns
+                   if c not in df.columns and c not in dummy_cols]
+        if missing:
+            raise ValueError(f"Input is missing model features: {missing}")
     return X

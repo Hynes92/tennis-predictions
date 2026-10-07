@@ -267,6 +267,12 @@ def run(df: pd.DataFrame, out_dir: Path) -> dict:
         "test_log_loss_xgboost": metrics["test_overall"]["xgboost"]["log_loss"],
     }, indent=2))
     xgb.save_model(out_dir / "xgb_model.json")
+    # Reference sample: raw test rows + the trained model's predictions. score.py rebuilds and
+    # re-scores these every run and refuses to write predictions if anything differs, which
+    # checks the whole scoring path (feature building + model loading) against training.
+    reference = test_df.head(1000).copy()
+    reference["_reference_prediction"] = preds["xgboost"][:1000]
+    reference.to_parquet(out_dir / "reference.parquet", index=False)
     import joblib
     joblib.dump(logreg, out_dir / "logreg.joblib")
     plot_calibration(y_te, preds, out_dir / "calibration.png")

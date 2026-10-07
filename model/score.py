@@ -59,6 +59,22 @@ def load_model(model_dir: Path):
     return model, features, metrics, info
 
 
+def verify_reference(model, features: list[str], model_dir: Path, tolerance: float = 1e-5) -> None:
+    """Re-score the reference rows saved at training time through THIS scoring path and stop if
+    the predictions differ: guards against any train/serve difference in feature building."""
+    path = model_dir / "reference.parquet"
+    if not path.exists():
+        raise RuntimeError("reference.parquet missing from the model directory; retrain the model")
+    ref = pd.read_parquet(path)
+    p = model.predict_proba(build_matrix(ref, feature_columns=features))[:, 1]
+    worst = float(np.max(np.abs(p - ref["_reference_prediction"].to_numpy())))
+    if worst > tolerance:
+        raise RuntimeError(f"Scoring path does not reproduce training predictions "
+                           f"(max difference {worst:.6f}); refusing to score")
+    log.info("Reference check passed: %d rows reproduce training predictions (max diff %.2e)",
+             len(ref), worst)
+
+
 def expected_value(prob: pd.Series, price: pd.Series) -> pd.Series:
     """Profit per 1 unit staked at decimal odds `price` if the true win probability is `prob`."""
     return prob * price - 1
@@ -182,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
 
     model, features, metrics, info = load_model(Path(args.model_dir))
     log.info("Model trained %s (%d features)", info.get("trained_at", "unknown"), len(features))
+    verify_reference(model, features, Path(args.model_dir))
 
     upcoming = load_upcoming(client, args.project, args.dataset)
     if upcoming.empty:
