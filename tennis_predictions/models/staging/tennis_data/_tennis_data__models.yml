@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: stg_tennis_data__matches
+    description: >
+      tennis-data.co.uk matches with typed odds and margin-free implied probabilities.
+      benchmark_prob_winner = Pinnacle, else Betfair Exchange, else bookmaker average
+      (Pinnacle is largely missing from 2026). Benchmarking only: never a model input.
+    columns:
+      - name: tdata_match_key
+        tests:
+          - unique:
+              config:
+                severity: warn
+          - not_null
+      - name: tour
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['atp', 'wta']
+      - name: winner_name
+        tests: [not_null]
+      - name: loser_name
+        tests: [not_null]
+      - name: benchmark_source
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['pinnacle', 'betfair_exchange', 'bookmaker_average']

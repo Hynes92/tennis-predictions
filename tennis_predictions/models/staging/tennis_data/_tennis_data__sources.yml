@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: tennis_data
+    description: >
+      tennis-data.co.uk ATP/WTA main-tour results with bookmaker closing odds, loaded by
+      ingestion/load_tennis_data.py. BENCHMARKING ONLY: never a model input.
+    schema: bronze
+    tables:
+      - name: tennis_data_atp_matches
+      - name: tennis_data_wta_matches

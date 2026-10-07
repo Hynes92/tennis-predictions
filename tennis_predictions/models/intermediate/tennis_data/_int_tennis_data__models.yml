@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: int_tennis_data__matched
+    description: >
+      tennis-data.co.uk matches linked to TennisMyLife match_key. match_status: strong (both
+      names match on surname + initial), weak (at least one only on surname), ambiguous
+      (tied candidates), unmatched. Benchmarking only.
+    config:
+      materialized: table
+    columns:
+      - name: tdata_match_key
+        tests:
+          - unique:
+              config:
+                severity: warn
+      - name: match_key
+        tests:
+          - unique:
+              config:
+                where: "match_key is not null"
+      - name: match_status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['strong', 'weak', 'ambiguous', 'unmatched']

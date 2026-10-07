@@ -84,6 +84,10 @@ def score(df: pd.DataFrame, model, features: list[str], metrics: dict, info: dic
           run_id: str, predicted_at: datetime) -> pd.DataFrame:
     X = build_matrix(df, feature_columns=features)
     p_a = model.predict_proba(X)[:, 1]
+    # Tier "none": at least one player has no usable history, so almost every feature is blank.
+    # The model never saw such rows in training and its output there is meaningless (often an
+    # extreme ~0.98), so no probability is published for them.
+    p_a = np.where(df["data_tier"].eq("none").to_numpy(), np.nan, p_a)
 
     tier_scores = metrics.get("test_by_data_tier", {})
 
@@ -115,7 +119,9 @@ def score(df: pd.DataFrame, model, features: list[str], metrics: dict, info: dic
         # model output
         "model_prob_a": p_a,
         "model_prob_b": 1 - p_a,
-        "predicted_winner": np.where(p_a >= 0.5, df["player_a_name"], df["player_b_name"]),
+        "predicted_winner": pd.Series(
+            np.where(p_a >= 0.5, df["player_a_name"], df["player_b_name"]), index=df.index,
+            dtype="object").where(~np.isnan(p_a), None),
 
         # baselines and market (comparison only)
         "elo_prob_a": df["elo_win_prob_a"],

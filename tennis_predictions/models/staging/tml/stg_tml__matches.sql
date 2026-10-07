@@ -34,15 +34,45 @@ labelled as (
 
 -- Bronze is append-only: the same match can arrive in both a yearly file and the
 -- ongoing-tournaments file, and again after a correction. Keep the most recent load.
-deduplicated as (
+-- TML occasionally leaves match_num blank (ATP Aug-Oct 2025): those rows are identified by
+-- round + winner + loser instead, so they aren't collapsed into one row per tournament.
+keyed as (
 
-    select *
+    select
+        *,
+        coalesce(
+            match_num,
+            '~' || coalesce(round, '') || '|' || coalesce(winner_id, winner_name, '')
+                || '|' || coalesce(loser_id, loser_name, '')
+        ) as match_identity
     from labelled
     where tourney_id is not null
-    qualify row_number() over (
-        partition by source_dataset, tourney_id, match_num
-        order by _loaded_at desc, _source_row_number desc
-    ) = 1
+
+),
+
+deduplicated as (
+
+    select
+        * except (null_match_seq) replace (
+            -- blank match_num -> stable synthetic number from 1001 (never clashes with real ones)
+            coalesce(match_num, cast(1000 + null_match_seq as string)) as match_num
+        )
+    from (
+        select
+            *,
+            row_number() over (
+                partition by source_dataset, tourney_id, match_num is null
+                order by match_identity
+            ) as null_match_seq
+        from (
+            select *
+            from keyed
+            qualify row_number() over (
+                partition by source_dataset, tourney_id, match_identity
+                order by _loaded_at desc, _source_row_number desc
+            ) = 1
+        )
+    )
 
 ),
 
