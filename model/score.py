@@ -195,8 +195,9 @@ def main(argv: list[str] | None = None) -> int:
     by_tier = predictions.groupby("data_tier").size().to_dict()
     log.info("Scored %d matches %s; value bets flagged: %d",
              len(predictions), by_tier, int(predictions["is_value_bet"].sum()))
-    cols = ["competition_name", "player_a_name", "player_b_name", "model_prob_a",
-            "market_prob_a", "data_tier", "value_side", "value_ev"]
+    # Run logs are public (public repo): print model output only, never Betfair prices or
+    # anything derived from them. The full detail is in the predictions table.
+    cols = ["competition_name", "player_a_name", "player_b_name", "model_prob_a", "data_tier"]
     with pd.option_context("display.width", 200, "display.max_columns", 20):
         print(predictions.sort_values("market_start_time")[cols].head(20).round(3).to_string(index=False))
 
