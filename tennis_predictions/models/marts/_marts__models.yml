@@ -77,3 +77,8 @@ models:
     description: >
       Model vs market log loss by period, tour and benchmark source. model_minus_market < 0
       means the model beat the market; ci95_low/high is the paired 95% confidence interval.
+  - name: rpt_market_blend
+    description: >
+      Log loss of market/model blends in log-odds space for model weights 0-1. Choose the
+      weight on valid (2024), evaluate on test (2025+). Tests whether the model adds
+      information beyond the market.

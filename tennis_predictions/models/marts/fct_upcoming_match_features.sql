@@ -138,13 +138,14 @@ sides as (
         c.market_id,
         s.side,
         s.player_id,
+        s.opponent_id,
         if(cf_latest.latest_tourney_id = c.tml_tourney_id
            and cf_latest.latest_tourney_date >= date_sub(current_date(), interval 21 day),
            'continuing', 'fresh') as form_variant
     from match_context as c
     cross join unnest([
-        struct('a' as side, c.player_a_id as player_id),
-        struct('b' as side, c.player_b_id as player_id)
+        struct('a' as side, c.player_a_id as player_id, c.player_b_id as opponent_id),
+        struct('b' as side, c.player_b_id as player_id, c.player_a_id as opponent_id)
     ]) as s
     left join {{ ref('int_player_current_form') }} as cf_latest
         on cf_latest.player_id = s.player_id and cf_latest.form_variant = 'fresh'
@@ -191,7 +192,18 @@ side_features as (
         f.serve_points_won_pct_52w, f.ace_rate_52w, f.double_fault_rate_52w,
         f.break_points_saved_pct_52w, f.service_hold_pct_52w,
         f.return_points_won_pct_52w, f.break_points_converted_pct_52w,
-        f.matches_last_4w, f.matches_this_tourney, f.minutes_this_tourney, f.sets_this_tourney
+        f.matches_last_4w, f.matches_this_tourney, f.minutes_this_tourney, f.sets_this_tourney,
+        
+        -- matchup and head-to-head as of today (no history = 0, exactly as in training)
+        coalesce(cm.vs_left_matches_104w, 0)              as vs_left_matches_104w,
+        coalesce(cm.vs_left_over_expected_104w, 0)        as vs_left_over_expected_104w,
+        coalesce(cm.vs_big_server_matches_104w, 0)        as vs_big_server_matches_104w,
+        coalesce(cm.vs_big_server_over_expected_104w, 0)  as vs_big_server_over_expected_104w,
+        coalesce(cm.vs_top50_matches_104w, 0)             as vs_top50_matches_104w,
+        coalesce(cm.vs_top50_over_expected_104w, 0)       as vs_top50_over_expected_104w,
+        coalesce(h2h.h2h_matches, 0)                      as h2h_matches,
+        coalesce(h2h.h2h_over_expected, 0)                as h2h_over_expected,
+        h2h.h2h_last_won
 
     from sides as sd
     inner join match_context as c using (market_id)
@@ -201,6 +213,10 @@ side_features as (
         on f.player_id = sd.player_id and f.form_variant = sd.form_variant
     left join {{ ref('int_player_current_surface_form') }} as sf
         on sf.player_id = sd.player_id and sf.form_variant = sd.form_variant and sf.surface = c.surface
+        left join {{ ref('int_player_current_matchup') }} as cm
+        on cm.player_id = sd.player_id
+    left join {{ ref('int_h2h_current') }} as h2h
+        on h2h.player_id = sd.player_id and h2h.opponent_id = sd.opponent_id
 
 ),
 
@@ -257,6 +273,11 @@ final as (
         a.{{ f }} - b.{{ f }} as diff_{{ f }},
         {%- endfor %}
         safe.ln(b.rank) - safe.ln(a.rank) as diff_log_rank,
+                -- serve vs return: A's serve strength against B's return strength, and vice versa
+        a.serve_points_won_pct_52w - b.return_points_won_pct_52w as a_serve_vs_return,
+        b.serve_points_won_pct_52w - a.return_points_won_pct_52w as b_serve_vs_return,
+        (a.serve_points_won_pct_52w - b.return_points_won_pct_52w)
+          - (b.serve_points_won_pct_52w - a.return_points_won_pct_52w) as diff_serve_vs_return,
 
         -- data sufficiency (same rules as fct_match_features, plus 'none' for unmapped players)
         least(a.matches_last_52w, b.matches_last_52w)                   as min_matches_last_52w,

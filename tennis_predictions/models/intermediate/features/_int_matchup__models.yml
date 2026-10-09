@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: int_player_match_history
+    description: >
+      One row per player per completed match (2005+): result vs Elo expectation
+      (over_expected) and the opponent's type at the time - left-handed, big server (ace rate
+      in the previous season's top quartile), top 50.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [match_key, player_id]
+
+  - name: int_player_matchup_form
+    description: >
+      Training matchup features, point-in-time: results vs expectation against left-handers,
+      big servers and top-50 players over 104 weeks, and head-to-head against this opponent.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [match_key, player_id]
+
+  - name: int_player_current_matchup
+    description: Matchup features as of today, one row per player, for scoring upcoming matches.
+    columns:
+      - name: player_id
+        tests: [unique, not_null]
+
+  - name: int_h2h_current
+    description: Head-to-head as of today for every pair that has met, from each player's side.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [player_id, opponent_id]

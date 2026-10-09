@@ -1,10 +1,12 @@
-version: 2
+﻿version: 2
 
 sources:
   - name: scoring
-    description: Tables written by model/score.py (the Python scoring step at the end of the pipeline).
+    description: Tables written by Python (model/score.py and model/train.py), read back by dbt.
     database: "{{ target.project }}"
     schema: "{{ 'gold' if target.name == 'prod' else target.schema ~ '_gold' }}"
     tables:
       - name: predictions
         description: Append-only. One row per upcoming match per scoring run.
+      - name: backtest_predictions
+        description: Out-of-sample (2024 valid, 2025+ test) predictions, replaced by each training run.

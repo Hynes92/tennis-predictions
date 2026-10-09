@@ -16,6 +16,10 @@
         'break_points_saved_pct_52w', 'service_hold_pct_52w',
         'return_points_won_pct_52w', 'break_points_converted_pct_52w',
         'matches_last_4w', 'matches_this_tourney', 'minutes_this_tourney', 'sets_this_tourney',
+        'vs_left_matches_104w', 'vs_left_over_expected_104w',
+        'vs_big_server_matches_104w', 'vs_big_server_over_expected_104w',
+        'vs_top50_matches_104w', 'vs_top50_over_expected_104w',
+        'h2h_matches', 'h2h_over_expected', 'h2h_last_won',
     ]) }}
 {% endmacro %}
 
@@ -26,5 +30,6 @@
         'serve_points_won_pct_52w', 'return_points_won_pct_52w',
         'service_hold_pct_52w', 'break_points_converted_pct_52w',
         'matches_last_4w', 'minutes_this_tourney', 'sets_this_tourney',
+        'vs_top50_over_expected_104w', 'h2h_over_expected',
     ]) }}
 {% endmacro %}

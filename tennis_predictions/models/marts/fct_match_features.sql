@@ -66,15 +66,20 @@ player_side as (
         coalesce(upper(pm.player_entry) = 'WC', false)         as is_wildcard,
         pm.player_seed                                         as seed,
 
-        -- rolling form (pre-match)
+                -- rolling form (pre-match)
         f.* except (match_key, player_id, opponent_id, tour, competition_level, surface,
-                    event_date, tourney_date, tourney_id, round_order, match_sequence_key)
+                    event_date, tourney_date, tourney_id, round_order, match_sequence_key),
+
+        -- matchup and head-to-head (pre-match)
+        mf.* except (match_key, player_id)
 
     from {{ ref('int_tml__player_matches') }} as pm
     inner join {{ ref('int_player_form') }} as f
         on f.match_key = pm.match_key and f.player_id = pm.player_id
     inner join {{ source('ratings', 'player_match_ratings') }} as r
         on r.match_key = pm.match_key and r.player_id = pm.player_id
+    left join {{ ref('int_player_matchup_form') }} as mf
+        on mf.match_key = pm.match_key and mf.player_id = pm.player_id
 
 ),
 
@@ -131,6 +136,11 @@ final as (
         {%- endfor %}
         -- rank is better when lower, so log(B) - log(A) is positive when A is ranked higher
         safe.ln(b.rank) - safe.ln(a.rank) as diff_log_rank,
+                -- serve vs return: A's serve strength against B's return strength, and vice versa
+        a.serve_points_won_pct_52w - b.return_points_won_pct_52w as a_serve_vs_return,
+        b.serve_points_won_pct_52w - a.return_points_won_pct_52w as b_serve_vs_return,
+        (a.serve_points_won_pct_52w - b.return_points_won_pct_52w)
+          - (b.serve_points_won_pct_52w - a.return_points_won_pct_52w) as diff_serve_vs_return,
 
         -- data sufficiency
         least(a.matches_last_52w, b.matches_last_52w)                   as min_matches_last_52w,
