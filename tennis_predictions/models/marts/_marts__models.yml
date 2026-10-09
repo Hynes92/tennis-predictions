@@ -62,3 +62,18 @@ models:
 
   - name: rpt_model_performance
     description: Live model vs market vs Elo, plus paper-trading results, overall and by tier and tour.
+
+  - name: fct_market_benchmark
+    description: >
+      Out-of-sample model / logistic regression / Elo predictions next to bookmaker closing
+      odds (Pinnacle, else Betfair Exchange, else average) for the same matches, oriented to
+      player A, with per-match log loss. Odds are benchmark only, never model inputs.
+    columns:
+      - name: match_key
+        tests: [unique, not_null]
+      - name: market_prob_a
+        tests: [not_null]
+  - name: rpt_model_vs_market
+    description: >
+      Model vs market log loss by period, tour and benchmark source. model_minus_market < 0
+      means the model beat the market; ci95_low/high is the paired 95% confidence interval.

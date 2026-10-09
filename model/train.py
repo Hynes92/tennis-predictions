@@ -277,7 +277,23 @@ def run(df: pd.DataFrame, out_dir: Path) -> dict:
     joblib.dump(logreg, out_dir / "logreg.joblib")
     plot_calibration(y_te, preds, out_dir / "calibration.png")
     plot_importance(importance, out_dir / "feature_importance.png")
-    return metrics
+
+    # Out-of-sample predictions for the validation (2024) and test (2025+) periods, for the
+    # market benchmark in dbt. Validation was used for early stopping only, so it's still
+    # unseen by the fitted trees; betting rules are chosen on it and checked on test.
+    oos = va | te
+    backtest = pd.DataFrame({
+        "match_key": df.loc[oos, "match_key"].to_numpy(),
+        "split": np.where(te[oos], "test", "valid"),
+        "tourney_date": pd.to_datetime(df.loc[oos, "tourney_date"]).dt.date.to_numpy(),
+        "a_won": y[oos].astype(bool),
+        "data_tier": df.loc[oos, "data_tier"].to_numpy(),
+        "model_prob_a": xgb.predict_proba(X[oos])[:, 1],
+        "logreg_prob_a": logreg.predict_proba(X[oos])[:, 1],
+        "elo_prob_a": df.loc[oos, "elo_win_prob_a"].astype(float).to_numpy(),
+    })
+    backtest.to_parquet(out_dir / "backtest_predictions.parquet", index=False)
+    return metrics, backtest
 
 
 def print_summary(metrics: dict) -> None:
@@ -296,16 +312,45 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--project", default=DEFAULT_PROJECT)
     p.add_argument("--dataset", default=DEFAULT_DATASET)
     p.add_argument("--location", default=DEFAULT_LOCATION)
+    p.add_argument("--no-upload", action="store_true",
+                   help="don't write backtest predictions to BigQuery")
     args = p.parse_args(argv)
 
     t0 = time.time()
     df = load(args.project, args.dataset, args.location)
     log.info("Loaded %d training-eligible matches in %.0fs", len(df), time.time() - t0)
 
-    metrics = run(df, ARTIFACTS)
+    metrics, backtest = run(df, ARTIFACTS)
     print_summary(metrics)
     log.info("Artifacts written to %s", ARTIFACTS)
+    if not args.no_upload:
+        upload_backtest(backtest, args.project, args.dataset, args.location)
     return 0
+
+
+def upload_backtest(backtest: pd.DataFrame, project: str, dataset: str, location: str) -> None:
+    """Replace <dataset>.backtest_predictions with this model's out-of-sample predictions."""
+    import os
+    from datetime import datetime, timezone
+    from google.cloud import bigquery
+    S = bigquery.SchemaField
+    schema = [
+        S("match_key", "STRING"), S("split", "STRING"), S("tourney_date", "DATE"),
+        S("a_won", "BOOL"), S("data_tier", "STRING"),
+        S("model_prob_a", "FLOAT64"), S("logreg_prob_a", "FLOAT64"), S("elo_prob_a", "FLOAT64"),
+        S("model_trained_at", "TIMESTAMP"), S("model_git_sha", "STRING"),
+    ]
+    out = backtest.copy()
+    out["model_trained_at"] = datetime.now(timezone.utc)
+    out["model_git_sha"] = os.environ.get("GITHUB_SHA")
+    client = bigquery.Client(project=project, location=location)
+    table = f"{project}.{dataset}.backtest_predictions"
+    client.load_table_from_dataframe(
+        out[[f.name for f in schema]], table,
+        job_config=bigquery.LoadJobConfig(
+            schema=schema, write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE),
+    ).result()
+    log.info("Wrote %d out-of-sample predictions to %s", len(out), table)
 
 
 if __name__ == "__main__":
